@@ -159,10 +159,10 @@ void MergeTreeIndexAggregatorFullText::update(const Block & block, size_t * pos,
         if (column->getDataType() == TypeIndex::Map)
         {
             //update for the key of Map type
-            auto * column_map = assert_cast<ColumnMap *>(const_cast<IColumn *>(column.get()));
-            auto & column_array = assert_cast<ColumnArray &>(column_map->getNestedColumn());
-            auto & column_tuple = assert_cast<ColumnTuple &>(column_array.getData());
-            auto & column_key = assert_cast<ColumnString &>(column_tuple.getColumn(0));
+            const auto * column_map = typeid_cast<const ColumnMap *>(const_cast<IColumn *>(column.get()));
+            const auto & column_array = typeid_cast<const ColumnArray &>(column_map->getNestedColumn());
+            const auto & column_tuple = typeid_cast<const ColumnTuple &>(column_array.getData());
+            const auto & column_key = typeid_cast<const ColumnString &>(column_tuple.getColumn(0));
 
             for (size_t i = 0; i < rows_read; ++i)
             {
@@ -359,8 +359,7 @@ bool MergeTreeConditionFullText::getKey(const ASTPtr & node, size_t & key_column
     //try to get map column name in arrayElement function
     if (const auto func = node.get()->as<ASTFunction>())
         if (func->name == "arrayElement")
-            column_name = assert_cast<ASTIdentifier *>(func->arguments.get()->children[0].get())->name();
-
+            column_name = typeid_cast<const ASTIdentifier *>(func->arguments.get()->children[0].get())->name();
     auto it = std::find(index_columns.begin(), index_columns.end(), column_name);
     if (it == index_columns.end())
         return false;
@@ -410,7 +409,7 @@ bool MergeTreeConditionFullText::atomFromAST(
         //try to parse arrayElement function
         if (const auto map_func = args[0].get()->as<ASTFunction>())
             if (map_func->name == "arrayElement")
-                const_value = assert_cast<ASTIdentifier *>(map_func->arguments->children[1].get())->name();
+                const_value = typeid_cast<const ASTLiteral *>(map_func->arguments.get()->children[1].get())->value;
         if (key_arg_pos == 1 && (func_name != "equals" && func_name != "notEquals"))
             return false;
         else if (!token_extractor->supportLike() && (func_name == "like" || func_name == "notLike"))
@@ -886,7 +885,7 @@ void bloomFilterIndexValidator(const IndexDescription & index, bool /*attach*/)
 
                 else
                 {
-                    DataTypeMap * map_type = assert_cast<DataTypeMap *>(const_cast<IDataType *>(data_type.get()));
+                    const auto * map_type = typeid_cast<const DataTypeMap *>(data_type.get());
 
                     if (map_type->getKeyType()->getTypeId() != TypeIndex::String&& map_type->getKeyType()->getTypeId() != TypeIndex::FixedString)
                          throw Exception("Bloom filter index can be used only with `String`,`FixedString` or `Map` with key of String or fixedString type.", ErrorCodes::INCORRECT_QUERY);
