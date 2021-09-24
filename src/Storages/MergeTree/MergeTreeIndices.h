@@ -165,6 +165,9 @@ private:
     Validators validators;
 };
 
+MergeTreeIndexPtr bitSlicedIndexCreator(const IndexDescription & index);
+void bitSlicedIndexValidator(const IndexDescription & index, bool attach);
+
 MergeTreeIndexPtr minmaxIndexCreator(const IndexDescription & index);
 void minmaxIndexValidator(const IndexDescription & index, bool attach);
 
