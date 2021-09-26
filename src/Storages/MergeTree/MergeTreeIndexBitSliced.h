@@ -47,7 +47,10 @@ public:
     MergeTreeIndexAggregatorBSI(const String & index_name_, const Block & index_smaple_block_)
     : index_name(index_name_),
       index_sample_block(index_smaple_block_)
-    {}
+    {
+        bit_slices_vector.resize(index_sample_block.columns());
+        bit_slices_sizes.resize(index_sample_block.columns());
+    }
 
     bool empty() const override;
     MergeTreeIndexGranulePtr getGranuleAndReset() override;
@@ -58,7 +61,7 @@ private:
     BitSlicesVector bit_slices_vector;
     std::vector<size_t> bit_slices_sizes;
 
-    void columnToBitSlices(UInt64 value, size_t col);
+    void columnToBitSlices(UInt64 value, const size_t & col, const size_t & row);
 };
 
 class MergeTreeIndexBitSlicedCondition final : public IMergeTreeIndexCondition
@@ -78,6 +81,7 @@ class MergeTreeIndexBitSliced final : public IMergeTreeIndex
 public:
     MergeTreeIndexBitSliced(const IndexDescription & index_): IMergeTreeIndex(index_){}
     bool mayBenefitFromIndexForIn(const ASTPtr & /*node*/) const override { return true; }
+    //This method is for deserialize the granuale
     MergeTreeIndexGranulePtr createIndexGranule() const override;
     MergeTreeIndexAggregatorPtr createIndexAggregator() const override;
     MergeTreeIndexConditionPtr createIndexCondition(const SelectQueryInfo & query_info, ContextPtr /*context*/) const override;

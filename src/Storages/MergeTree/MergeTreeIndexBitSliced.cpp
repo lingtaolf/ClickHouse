@@ -20,6 +20,7 @@ void MergeTreeIndexGranuleBSI::serializeBinary(DB::WriteBuffer & ostr) const
 
     for (size_t col = 0; col < index_sample_block.columns(); col++)
     {
+        //FIXME: this bit_slices_vector is empty
         for (auto bit_slice : bit_slices_vector[col])
         {
             auto size = bit_slice->getSizeInBytes();
@@ -113,23 +114,25 @@ void MergeTreeIndexAggregatorBSI::update(const Block & block, size_t * pos, size
             + toString(*pos) + ", Block rows: " + toString(block.rows()) + ".", ErrorCodes::LOGICAL_ERROR);
 
     size_t rows_read = std::min(limit, block.rows() - *pos);
+    size_t row_number = *pos;
 
     for (size_t col = 0; col < index_sample_block.columns(); ++col)
     {
         auto index_column_name = index_sample_block.getByPosition(col).name;
-        const auto & column = block.getByName(index_column_name).column->cut(*pos, rows_read);
+        const auto & column = block.getByName(index_column_name).column;
 
         for (size_t i = 0; i < rows_read; ++i)
         {
             UInt64 value = static_cast<UInt64>(column->getUInt(*pos + i));
-            columnToBitSlices(value, col);
+            columnToBitSlices(value, col, row_number);
+            row_number++;
         }
     }
 
     *pos += rows_read;
 }
 
-void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, size_t col)
+void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, const size_t & col, const size_t & row)
 {
     //Decimal to binary
     std::list<uint> l;
@@ -140,15 +143,23 @@ void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, size_t col)
         value = value >> 1;
     }
 
-    BitSlices bit_slices = bit_slices_vector[col];
+    if (bit_slices_sizes.empty() || bit_slices_vector.empty())
+    {
+        bit_slices_vector.resize(index_sample_block.columns());
+        bit_slices_sizes.resize(index_sample_block.columns());
+    }
 
+    BitSlices & bit_slices = bit_slices_vector[col];
+    size_t & bit_slices_size = bit_slices_sizes[col];
+
+    //Add more bit slice to represent bigger value
     if (l.size() > bit_slices.size())
     {
         for (size_t i = 0; i < (l.size() - bit_slices.size()); i ++)
         {
             bit_slices.emplace_back(std::make_shared<RoaringBitmap>());
         }
-        bit_slices_sizes[col] = l.size();
+        bit_slices_size = l.size();
     }
 
     size_t bit_index = 0;
@@ -156,7 +167,8 @@ void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, size_t col)
     for (auto iter = l.begin(); iter != l.end(); iter++)
     {
         auto bit_slice = bit_slices.at(bit_index);
-        bit_slice->add(static_cast<UInt64>(*iter));
+        if (*iter == 1)
+            bit_slice->add(static_cast<UInt64>(row));
     }
 
 }
