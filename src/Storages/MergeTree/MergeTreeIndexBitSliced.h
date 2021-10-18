@@ -3,8 +3,8 @@
 #include <Storages/MergeTree/MergeTreeIndices.h>
 #include <roaring.hh>
 #include <roaring64map.hh>
-#include <Interpreters/Context_fwd.h>
-
+#include <Storages/MergeTree/RPNBuilder.h>
+#include "MergeTreeIndexConditionBloomFilter.h"
 
 namespace DB
 {
@@ -12,6 +12,7 @@ using RoaringBitmap = roaring::Roaring64Map;
 using RoaringBitmapPtr = std::shared_ptr<RoaringBitmap>;
 using BitSlices = std::vector<RoaringBitmapPtr>;
 using BitSlicesVector = std::vector<BitSlices>;
+
 class MergeTreeIndexGranuleBSI final : public IMergeTreeIndexGranule
 {
 public:
@@ -33,6 +34,14 @@ public:
     void deserializeBinary(ReadBuffer & istr, MergeTreeIndexVersion version) override;
 
     bool empty() const override;
+
+    BitSlices &  getBitSlicesByCol(const size_t & col_number) 
+    {
+        if (!bit_slices_vector.empty())
+            return bit_slices_vector.at(col_number);
+        else
+            throw Exception();
+    }
 
 private:
     String index_name;
@@ -64,16 +73,57 @@ private:
     void columnToBitSlices(UInt64 value, const size_t & col, const size_t & row);
 };
 
+
 class MergeTreeIndexBitSlicedCondition final : public IMergeTreeIndexCondition
 {
 public:
-    MergeTreeIndexBitSlicedCondition(const SelectQueryInfo & /*info_*/){}
+    struct RPNElement
+    {
+        enum Function
+        {
+            /// Atoms of a Boolean expression.
+            FUNCTION_EQUALS,
+            FUNCTION_NOT_EQUALS,
+            FUNCTION_IN,
+            FUNCTION_NOT_IN,
+            FUNCTION_MULTI_SEARCH,
+            FUNCTION_UNKNOWN, /// Can take any value.
+            /// Operators of the logical expression.
+            FUNCTION_NOT,
+            FUNCTION_AND,
+            FUNCTION_OR,
+            /// Constants
+            ALWAYS_FALSE,
+            ALWAYS_TRUE,
+        };
 
-    bool alwaysUnknownOrTrue() const override;
+        RPNElement(
+            Function function_ = FUNCTION_UNKNOWN, size_t key_column_ = 0, std::list<uint> binary_arr_ = nullptr)
+            : function(function_), key_column(key_column_), binary_arr(binary_arr_) {}
+
+        Function function = FUNCTION_UNKNOWN;
+        /// For FUNCTION_EQUALS, FUNCTION_NOT_EQUALS and FUNCTION_MULTI_SEARCH
+        size_t key_column;
+        // List to represent a integer base on binary like '1001'
+        std::list<uint> binary_arr;
+    };
+
+    MergeTreeIndexBitSlicedCondition(const SelectQueryInfo & info_, ContextPtr context_, const Block & header_);
+    ~MergeTreeIndexBitSlicedCondition() override = default;
+
+    bool alwaysUnknownOrTrue() const override { return true; }
+
     bool mayBeTrueOnGranule(MergeTreeIndexGranulePtr granule) const override;
+
+    bool atomFromAST(const ASTPtr & node, Block & block_with_constants, RPNElement & out) { return false; }
+
 private:
-    // const SelectQueryInfo & query_info;
-    //const Block header;
+    using RPN = std::vector<RPNElement>;
+
+    const Block & header;
+    const SelectQueryInfo & query_info;
+    Names index_columns;
+    RPN rpn;
 };
 
 class MergeTreeIndexBitSliced final : public IMergeTreeIndex
