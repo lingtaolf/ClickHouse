@@ -8,6 +8,8 @@
 #include <Parsers/ASTSelectQuery.h>
 #include <Parsers/ASTFunction.h>
 #include <Storages/SelectQueryInfo.h>
+#include <roaring.hh>
+#include <roaring64map.hh>
 
 
 namespace DB
@@ -18,6 +20,11 @@ class IFunction;
 using FunctionBasePtr = std::shared_ptr<IFunctionBase>;
 class ExpressionActions;
 using ExpressionActionsPtr = std::shared_ptr<ExpressionActions>;
+
+using RoaringBitmap = roaring::Roaring64Map;
+using RoaringBitmapPtr = std::shared_ptr<RoaringBitmap>;
+using BitSlices = std::vector<RoaringBitmapPtr>;
+using BitSlicesVector = std::vector<BitSlices>;
 
 /** A field, that can be stored in two representations:
   * - A standalone field.
@@ -218,6 +225,8 @@ public:
     BoolMask checkInHyperrectangle(
         const std::vector<Range> & hyperrectangle,
         const DataTypes & data_types) const;
+    
+    BoolMask checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & data_types) const;
 
     /// Whether the condition and its negation are (independently) feasible in the key range.
     /// left_key and right_key must contain all fields in the sort_descr in the appropriate order.

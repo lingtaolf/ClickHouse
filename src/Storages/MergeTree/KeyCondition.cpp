@@ -498,6 +498,12 @@ KeyCondition::KeyCondition(
           * are pushed down and applied (when possible) to leaf nodes.
           */
         traverseAST(cloneASTWithInversionPushDown(filter_query), context, block_with_constants);
+
+        // if this is a BSI
+        // for (auto element : rpn)
+        // {
+        //     element.
+        // }
     }
     else
     {
@@ -1949,6 +1955,25 @@ bool KeyCondition::matchesExactContinuousRange() const
     }
 
     return true;
+}
+
+BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & /*data_types*/) const
+{
+    std::vector<BoolMask> rpn_stack;
+
+    // for (const auto & element : rpn)
+    // {
+    //     // if (element.function == RPNElement::FUNCTION_UNKNOWN)
+    //     // {
+    //     //     rpn_stack.emplace_back(true, true)
+    //     // }
+    //     // else if (element.function == RPNElement::FUNCTION_IN_RANGE
+    //     //     || element.function == RPNElement::FUNCTION_NOT_IN_RANGE)
+    //     // {
+    //     //     auto bit_slices = all_bit_slices[element.key_column];
+    //     // }
+    // }
+    return rpn_stack[0];
 }
 
 BoolMask KeyCondition::checkInHyperrectangle(
