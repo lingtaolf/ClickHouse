@@ -26,8 +26,13 @@
 #include <Storages/KeyDescription.h>
 
 #include <cassert>
+#include <sstream>
 #include <stack>
 #include <limits>
+#include <thread>
+#include <base/logger_useful.h>
+#include <roaring.hh>
+#include <roaring64map.hh>
 
 
 namespace DB
@@ -1957,32 +1962,191 @@ bool KeyCondition::matchesExactContinuousRange() const
     return true;
 }
 
-BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & /*data_types*/) const
+BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & data_types) const
 {
     std::vector<BoolMask> rpn_stack;
+    for (const auto & element : rpn)
+    {
+        LOG_INFO(&Poco::Logger::get("KeyCondition"), "=== Element is {}", element.toString());
+        LOG_INFO(&Poco::Logger::get("KeyCondition"), "=== Element function is {}", element.function);
 
-    // for (const auto & element : rpn)
-    // {
-    //     // if (element.function == RPNElement::FUNCTION_UNKNOWN)
-    //     // {
-    //     //     rpn_stack.emplace_back(true, true)
-    //     // }
-    //     // else if (element.function == RPNElement::FUNCTION_IN_RANGE
-    //     //     || element.function == RPNElement::FUNCTION_NOT_IN_RANGE)
-    //     // {
-    //     //     auto bit_slices = all_bit_slices[element.key_column];
-    //     // }
-    // }
+        if (element.function == RPNElement::FUNCTION_UNKNOWN)
+        {
+            rpn_stack.emplace_back(true, true);
+        }
+        else if (element.function == RPNElement::FUNCTION_IN_RANGE
+            || element.function == RPNElement::FUNCTION_NOT_IN_RANGE)
+        {
+            const BitSlices & bit_slices = bit_slices_vector[element.key_column];
+
+            /// The case when the column is wrapped in a chain of possibly monotonic functions.
+            Range transformed_range;
+            if (!element.monotonic_functions_chain.empty())
+                throw Exception("BSI not support function operation", ErrorCodes::LOGICAL_ERROR);
+
+            
+
+            rpn_stack.emplace_back(intersects, !contains);
+            if (element.function == RPNElement::FUNCTION_NOT_IN_RANGE)
+                rpn_stack.back() = !rpn_stack.back();
+        }
+        else if (
+            element.function == RPNElement::FUNCTION_IS_NULL
+            || element.function == RPNElement::FUNCTION_IS_NOT_NULL)
+        {
+            //const Range * key_range = &hyperrectangle[element.key_column];
+            Range * key_range;
+
+            /// No need to apply monotonic functions as nulls are kept.
+            bool intersects = element.range.intersectsRange(*key_range);
+            bool contains = element.range.containsRange(*key_range);
+
+            rpn_stack.emplace_back(intersects, !contains);
+            if (element.function == RPNElement::FUNCTION_IS_NULL)
+                rpn_stack.back() = !rpn_stack.back();
+        }
+        else if (
+            element.function == RPNElement::FUNCTION_IN_SET
+            || element.function == RPNElement::FUNCTION_NOT_IN_SET)
+        {
+            if (!element.set_index)
+                throw Exception("Set for IN is not created yet", ErrorCodes::LOGICAL_ERROR);
+
+            rpn_stack.emplace_back(element.set_index->checkInRange(hyperrectangle, data_types));
+            if (element.function == RPNElement::FUNCTION_NOT_IN_SET)
+                rpn_stack.back() = !rpn_stack.back();
+        }
+        else if (element.function == RPNElement::FUNCTION_NOT)
+        {
+            assert(!rpn_stack.empty());
+
+            rpn_stack.back() = !rpn_stack.back();
+        }
+        else if (element.function == RPNElement::FUNCTION_AND)
+        {
+            assert(!rpn_stack.empty());
+
+            auto arg1 = rpn_stack.back();
+            rpn_stack.pop_back();
+            auto arg2 = rpn_stack.back();
+            rpn_stack.back() = arg1 & arg2;
+        }
+        else if (element.function == RPNElement::FUNCTION_OR)
+        {
+            assert(!rpn_stack.empty());
+
+            auto arg1 = rpn_stack.back();
+            rpn_stack.pop_back();
+            auto arg2 = rpn_stack.back();
+            rpn_stack.back() = arg1 | arg2;
+        }
+        else if (element.function == RPNElement::ALWAYS_FALSE)
+        {
+            rpn_stack.emplace_back(false, true);
+        }
+        else if (element.function == RPNElement::ALWAYS_TRUE)
+        {
+            rpn_stack.emplace_back(true, false);
+        }
+        else
+            throw Exception("Unexpected function type in KeyCondition::RPNElement", ErrorCodes::LOGICAL_ERROR);
+    }
+
+    if (rpn_stack.size() != 1)
+        throw Exception("Unexpected stack size in KeyCondition::checkInRange", ErrorCodes::LOGICAL_ERROR);
+
     return rpn_stack[0];
+}
+
+bool computeBitslice(const Range & range, BitSlices & bit_slices)
+{
+
+    if (!range.left.isNull() && !range.right.isNull())
+    {
+        UInt256 left_value = range.left.safeGet<UInt25>()
+    }
+
+    std::list<uint> l_s;
+   
+    //6  from 011->110 reverse
+    while (n != 0)
+    {
+        l_s.emplace_front(n % 2);
+        n = n >> 1;
+    }
+
+    int st = l_s.size();
+    int binary_arr[st];
+
+    int ix = 0;
+    for (int x : l_s)
+    {
+        std::cout<<"x is "<<x<<std::endl;
+        binary_arr[ix] = x;
+        ix++;
+    }
+
+    for (int i = 0; i < st; i++)
+        std::cout << binary_arr[i];
+    std::cout << std::endl;
+
+    auto b_gt = std::make_shared<RoaringBitmap>() ;
+    auto b_lt = std::make_shared<RoaringBitmap>();
+    auto b_eq = bit_slices.at(0);
+
+    int slice_number = bit_slices.size()-1;
+    int bit_index = l_s.size()-1;
+    auto bnn = bit_slices.at(0);
+
+    // std::cout<<"bitmap befor operators"<<std::endl;
+    // roaring::api::roaring_bitmap_printf(b_eq->);
+    // std::cout << std::endl;
+    // roaring::api::roaring_bitmap_printf(b_lt);
+    // std::cout << std::endl;
+    // roaring::api::roaring_bitmap_printf(b_gt);
+    // std::cout << std::endl;
+    
+
+    for (int slice_index = slice_number; slice_index > 0; slice_index--)
+    {
+        std::cout<<"Bit slice number is "<<slice_index-1<<std::endl;
+        auto b_i = bit_slices.at(slice_index);
+        if (!(st < slice_index) && binary_arr[slice_index - 1] == 1)
+        {
+            *b_lt = *b_lt | (*b_eq & (*b_i ^ *bnn));
+
+          // b_lt = roaring_bitmap_or(b_lt, roaring_bitmap_and(b_eq, roaring_bitmap_xor(b_i,bnn)));
+ 
+            *b_eq = *b_eq & *b_i;
+            //b_eq = roaring_bitmap_and(b_eq, b_i);
+        }
+        else
+        {
+            *b_gt = *b_gt | (*b_eq & *b_i);
+            *b_eq = *b_eq & (*b_i ^ *bnn);
+           // b_gt = roaring_bitmap_or(b_gt, roaring_bitmap_and(b_eq, b_i));
+           // b_eq = roaring_bitmap_and(b_eq, roaring_bitmap_xor(b_i,bnn));
+        }
+        
+    }
+
+    
+
 }
 
 BoolMask KeyCondition::checkInHyperrectangle(
     const std::vector<Range> & hyperrectangle,
     const DataTypes & data_types) const
 {
+    std::stringstream ss;
+    ss<<std::this_thread::get_id();
+    auto tid = ss.str();
     std::vector<BoolMask> rpn_stack;
     for (const auto & element : rpn)
     {
+        LOG_INFO(&Poco::Logger::get("KeyCondition"), "===[{}] Element is {}", tid, element.toString());
+        LOG_INFO(&Poco::Logger::get("KeyCondition"), "===[{}] Element function is {}", tid, element.function);
+
         if (element.function == RPNElement::FUNCTION_UNKNOWN)
         {
             rpn_stack.emplace_back(true, true);
@@ -1994,6 +2158,7 @@ BoolMask KeyCondition::checkInHyperrectangle(
 
             /// The case when the column is wrapped in a chain of possibly monotonic functions.
             Range transformed_range;
+           
             if (!element.monotonic_functions_chain.empty())
             {
                 std::optional<Range> new_range = applyMonotonicFunctionsChainToRange(
@@ -2008,6 +2173,9 @@ BoolMask KeyCondition::checkInHyperrectangle(
                     rpn_stack.emplace_back(true, true);
                     continue;
                 }
+                
+                LOG_INFO(&Poco::Logger::get("KeyCondition"), "=== [{}] New Range for element is ({}, {})", tid, new_range->left.safeGet<UInt32>(), new_range->right.safeGet<UInt32>());
+
                 transformed_range = *new_range;
                 key_range = &transformed_range;
             }

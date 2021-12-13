@@ -49,7 +49,6 @@ public:
             throw Exception();
     }
 
-private:
     String index_name;
     BitSlicesVector bit_slices_vector;
     // this is for deserialize bit slices
@@ -96,7 +95,6 @@ public:
     bool alwaysUnknownOrTrue() const override;
     bool mayBeTrueOnGranule(MergeTreeIndexGranulePtr granule) const override;
 
-private:
     DataTypes index_data_types;
     KeyCondition condition;
 };
