@@ -98,6 +98,9 @@ MergeTreeIndexFactory::MergeTreeIndexFactory()
 
     registerCreator("bloom_filter", bloomFilterIndexCreatorNew);
     registerValidator("bloom_filter", bloomFilterIndexValidatorNew);
+
+    registerCreator("bit_sliced_index", bitSlicedIndexValidator);
+    registerValidator("bit_sliced_index", bitSlicedIndexCreator);
 }
 
 MergeTreeIndexFactory & MergeTreeIndexFactory::instance()

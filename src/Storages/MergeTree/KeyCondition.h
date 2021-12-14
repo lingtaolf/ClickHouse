@@ -364,6 +364,7 @@ private:
     void traverseAST(const ASTPtr & node, ContextPtr context, Block & block_with_constants);
     bool tryParseAtomFromAST(const ASTPtr & node, ContextPtr context, Block & block_with_constants, RPNElement & out);
     static bool tryParseLogicalOperatorFromAST(const ASTFunction * func, RPNElement & out);
+    static bool computeBitslice(const Range & range, const BitSlices & bit_slices);
 
     /** Is node the key column
       *  or expression in which column of key is wrapped by chain of functions,

@@ -1,4 +1,4 @@
-#include "MergeTreeIndexBitSliced.h"
+#include <Storages/MergeTree/MergeTreeIndexBitSliced.h>
 #include <IO/WriteHelpers.h>
 
 
@@ -65,28 +65,9 @@ bool MergeTreeIndexGranuleBSI::empty() const
     return bit_slices_vector.empty();
 }
 
-
-MergeTreeIndexPtr bitSlicedIndexCreator(const IndexDescription & index)
-{
-    return std::make_shared<MergeTreeIndexBitSliced>(index);
-}
-
-
 MergeTreeIndexAggregatorPtr MergeTreeIndexBitSliced::createIndexAggregator() const
 {
     return std::make_shared<MergeTreeIndexAggregatorBSI>(index.name, index.sample_block);
-}
-
-
-void bitSlicedIndexValidator(const IndexDescription & index, bool /*attach*/)
-{
-    for (const auto & data_type : index.data_types)
-    {
-        if (data_type->getTypeId() != TypeIndex::UInt8 && data_type->getTypeId() != TypeIndex::UInt32
-            && data_type->getTypeId() != TypeIndex::UInt64 && data_type->getTypeId() != TypeIndex::UInt128
-            && data_type->getTypeId() != TypeIndex::UInt256)
-            throw Exception("Bit sliced index can be used only with positive integer type.", ErrorCodes::INCORRECT_QUERY);
-    }
 }
 
 bool MergeTreeIndexAggregatorBSI::empty() const
@@ -216,37 +197,22 @@ bool MergeTreeIndexBitSlicedCondition::mayBeTrueOnGranule(MergeTreeIndexGranuleP
         throw Exception("Bit sliced index condition got a granule with the wrong type.", ErrorCodes::LOGICAL_ERROR);
 
     return condition.checkInBitSlices(granule->bit_slices_vector, index_data_types).can_be_true;
-    // std::vector<BoolMask> rpn_stack;
-    // for (const auto & element : rpn)
-    // {
-    //     if (element.function == RPNElement::FUNCTION_UNKNOWN)
-    //     {
-    //         rpn_stack.emplace_back(true, true);
-    //     }
-
-    //     auto bit_slices = granule->getBitSlicesByCol(element.key_column);
-
-    //     size_t slice_amount = bit_slices.size()-1;
-
-    //     RoaringBitmapPtr b_nn = bit_slices.at(0);
-
-    //     RoaringBitmap b_eq;
-    //     RoaringBitmap b_lt;
-    //     RoaringBitmap b_gt;
-
-    //     for (int slice_index = slice_amount; slice_index > 0; slice_index--)
-    //     {
-    //         RoaringBitmapPtr b_i = bit_slices.at(slice_index);
-
-    //     }
-    //     // else
-
-    //     //     throw Exception("Unexpected function type in BloomFilterCondition::RPNElement", ErrorCodes::LOGICAL_ERROR);
-    // }
-
-    // if (rpn_stack.size() != 1)
-    //     throw Exception("Unexpected stack size in BloomFilterCondition::mayBeTrueOnGranule", ErrorCodes::LOGICAL_ERROR);
-
-    // return rpn_stack[0].can_be_true;
 }
+
+MergeTreeIndexPtr bitSlicedIndexCreator(const IndexDescription & index)
+{
+    return std::make_shared<MergeTreeIndexBitSliced>(index);
+}
+
+void bitSlicedIndexValidator(const IndexDescription & index, bool /*attach*/)
+{
+    for (const auto & data_type : index.data_types)
+    {
+        if (data_type->getTypeId() != TypeIndex::UInt8 && data_type->getTypeId() != TypeIndex::UInt32
+            && data_type->getTypeId() != TypeIndex::UInt64 && data_type->getTypeId() != TypeIndex::UInt128
+            && data_type->getTypeId() != TypeIndex::UInt256)
+            throw Exception("Bit sliced index can be used only with positive integer type.", ErrorCodes::INCORRECT_QUERY);
+    }
+}
+
 }

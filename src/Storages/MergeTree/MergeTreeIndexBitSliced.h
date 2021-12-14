@@ -4,8 +4,8 @@
 #include <roaring.hh>
 #include <roaring64map.hh>
 #include <Storages/MergeTree/RPNBuilder.h>
+#include <Storages/MergeTree/MergeTreeData.h>
 #include "IO/WriteBuffer.h"
-#include "MergeTreeIndexConditionBloomFilter.h"
 
 namespace DB
 {

@@ -1962,7 +1962,7 @@ bool KeyCondition::matchesExactContinuousRange() const
     return true;
 }
 
-BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & data_types) const
+BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & /**data_types**/) const
 {
     std::vector<BoolMask> rpn_stack;
     for (const auto & element : rpn)
@@ -1980,40 +1980,12 @@ BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vecto
             const BitSlices & bit_slices = bit_slices_vector[element.key_column];
 
             /// The case when the column is wrapped in a chain of possibly monotonic functions.
-            Range transformed_range;
             if (!element.monotonic_functions_chain.empty())
                 throw Exception("BSI not support function operation", ErrorCodes::LOGICAL_ERROR);
 
+            rpn_stack.emplace_back(computeBitslice(element.range, bit_slices), false); 
             
-
-            rpn_stack.emplace_back(intersects, !contains);
             if (element.function == RPNElement::FUNCTION_NOT_IN_RANGE)
-                rpn_stack.back() = !rpn_stack.back();
-        }
-        else if (
-            element.function == RPNElement::FUNCTION_IS_NULL
-            || element.function == RPNElement::FUNCTION_IS_NOT_NULL)
-        {
-            //const Range * key_range = &hyperrectangle[element.key_column];
-            Range * key_range;
-
-            /// No need to apply monotonic functions as nulls are kept.
-            bool intersects = element.range.intersectsRange(*key_range);
-            bool contains = element.range.containsRange(*key_range);
-
-            rpn_stack.emplace_back(intersects, !contains);
-            if (element.function == RPNElement::FUNCTION_IS_NULL)
-                rpn_stack.back() = !rpn_stack.back();
-        }
-        else if (
-            element.function == RPNElement::FUNCTION_IN_SET
-            || element.function == RPNElement::FUNCTION_NOT_IN_SET)
-        {
-            if (!element.set_index)
-                throw Exception("Set for IN is not created yet", ErrorCodes::LOGICAL_ERROR);
-
-            rpn_stack.emplace_back(element.set_index->checkInRange(hyperrectangle, data_types));
-            if (element.function == RPNElement::FUNCTION_NOT_IN_SET)
                 rpn_stack.back() = !rpn_stack.back();
         }
         else if (element.function == RPNElement::FUNCTION_NOT)
@@ -2058,79 +2030,104 @@ BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vecto
     return rpn_stack[0];
 }
 
-bool computeBitslice(const Range & range, BitSlices & bit_slices)
+bool KeyCondition::computeBitslice(const Range & range, const BitSlices & bit_slices)
 {
+    //constexpr int GT_INDEX = 0;
+    constexpr int GE_INDEX = 1;
+    //constexpr int EQ_INDEX = 2;
+   // constexpr int LT_INDEX = 3;
+    constexpr int LE_INDEX = 4;
+
+    //this func is to compute the rbs by specified number
+    auto get_result = [& bit_slices](size_t n) {
+        
+        std::list<uint> l_s;
+
+        //6  from 011->110 reverse
+        while (n != 0)
+        {
+            l_s.emplace_front(n % 2);
+            n = n >> 1;
+        }
+
+        int st = l_s.size();
+        int binary_arr[st];
+
+        int ix = 0;
+        for (int x : l_s)
+        {
+            std::cout << "x is " << x << std::endl;
+            binary_arr[ix] = x;
+            ix++;
+        }
+
+        for (int i = 0; i < st; i++)
+            std::cout << binary_arr[i];
+        std::cout << std::endl;
+
+        auto b_gt = std::make_shared<RoaringBitmap>();
+        auto b_lt = std::make_shared<RoaringBitmap>();
+        auto b_eq = bit_slices.at(0);
+
+        int slice_number = bit_slices.size() - 1;
+        auto bnn = bit_slices.at(0);
+
+        for (int slice_index = slice_number; slice_index > 0; slice_index--)
+        {
+            std::cout << "Bit slice number is " << slice_index - 1 << std::endl;
+            auto b_i = bit_slices.at(slice_index);
+            if (!(st < slice_index) && binary_arr[slice_index - 1] == 1)
+            {
+                *b_lt = *b_lt | (*b_eq & (*b_i ^ *bnn));
+
+                // b_lt = roaring_bitmap_or(b_lt, roaring_bitmap_and(b_eq, roaring_bitmap_xor(b_i,bnn)));
+
+                *b_eq = *b_eq & *b_i;
+                //b_eq = roaring_bitmap_and(b_eq, b_i);
+            }
+            else
+            {
+                *b_gt = *b_gt | (*b_eq & *b_i);
+                *b_eq = *b_eq & (*b_i ^ *bnn);
+                // b_gt = roaring_bitmap_or(b_gt, roaring_bitmap_and(b_eq, b_i));
+                // b_eq = roaring_bitmap_and(b_eq, roaring_bitmap_xor(b_i,bnn));
+            }
+        }
+        auto b_ge = *b_gt & *b_eq;
+        auto b_le = *b_lt & *b_eq;
+        std::vector<RoaringBitmap> result;
+        result.emplace_back(*b_gt);
+        result.emplace_back(b_ge);
+        result.emplace_back(*b_eq);
+        result.emplace_back(*b_lt);
+        result.emplace_back(b_le);
+
+        return result;
+    };
 
     if (!range.left.isNull() && !range.right.isNull())
     {
-        UInt256 left_value = range.left.safeGet<UInt25>()
-    }
+        UInt256 left_value = range.left.safeGet<UInt256>();
+        UInt256 right_value = range.right.safeGet<UInt256>();
 
-    std::list<uint> l_s;
-   
-    //6  from 011->110 reverse
-    while (n != 0)
-    {
-        l_s.emplace_front(n % 2);
-        n = n >> 1;
-    }
-
-    int st = l_s.size();
-    int binary_arr[st];
-
-    int ix = 0;
-    for (int x : l_s)
-    {
-        std::cout<<"x is "<<x<<std::endl;
-        binary_arr[ix] = x;
-        ix++;
-    }
-
-    for (int i = 0; i < st; i++)
-        std::cout << binary_arr[i];
-    std::cout << std::endl;
-
-    auto b_gt = std::make_shared<RoaringBitmap>() ;
-    auto b_lt = std::make_shared<RoaringBitmap>();
-    auto b_eq = bit_slices.at(0);
-
-    int slice_number = bit_slices.size()-1;
-    int bit_index = l_s.size()-1;
-    auto bnn = bit_slices.at(0);
-
-    // std::cout<<"bitmap befor operators"<<std::endl;
-    // roaring::api::roaring_bitmap_printf(b_eq->);
-    // std::cout << std::endl;
-    // roaring::api::roaring_bitmap_printf(b_lt);
-    // std::cout << std::endl;
-    // roaring::api::roaring_bitmap_printf(b_gt);
-    // std::cout << std::endl;
-    
-
-    for (int slice_index = slice_number; slice_index > 0; slice_index--)
-    {
-        std::cout<<"Bit slice number is "<<slice_index-1<<std::endl;
-        auto b_i = bit_slices.at(slice_index);
-        if (!(st < slice_index) && binary_arr[slice_index - 1] == 1)
+        auto left_rbs = get_result(left_value);
+        auto right_rbs = get_result(right_value);
+        
+        if(!range.left_included) 
         {
-            *b_lt = *b_lt | (*b_eq & (*b_i ^ *bnn));
-
-          // b_lt = roaring_bitmap_or(b_lt, roaring_bitmap_and(b_eq, roaring_bitmap_xor(b_i,bnn)));
- 
-            *b_eq = *b_eq & *b_i;
-            //b_eq = roaring_bitmap_and(b_eq, b_i);
-        }
-        else
-        {
-            *b_gt = *b_gt | (*b_eq & *b_i);
-            *b_eq = *b_eq & (*b_i ^ *bnn);
-           // b_gt = roaring_bitmap_or(b_gt, roaring_bitmap_and(b_eq, b_i));
-           // b_eq = roaring_bitmap_and(b_eq, roaring_bitmap_xor(b_i,bnn));
+            //those codes can be optimize to one line
+            if (!range.right_included)
+                return true;
+            // (-Inf, a]
+            if (range.right_included)
+                return right_rbs.at(LE_INDEX).cardinality();
         }
         
-    }
 
-    
+        if (range.right_included)
+            return (left_rbs.at(GE_INDEX) & right_rbs.at(LE_INDEX)).cardinality();
+    }
+    return false;
 
 }
 

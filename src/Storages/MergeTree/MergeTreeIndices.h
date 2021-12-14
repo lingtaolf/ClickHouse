@@ -177,4 +177,6 @@ void bloomFilterIndexValidator(const IndexDescription & index, bool attach);
 MergeTreeIndexPtr bloomFilterIndexCreatorNew(const IndexDescription & index);
 void bloomFilterIndexValidatorNew(const IndexDescription & index, bool attach);
 
+MergeTreeIndexPtr bitSlicedIndexValidator(const IndexDescription & index);
+void bitSlicedIndexCreator(const IndexDescription & index, bool attach);
 }
