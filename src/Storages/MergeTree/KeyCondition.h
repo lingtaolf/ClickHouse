@@ -10,6 +10,7 @@
 #include <Storages/SelectQueryInfo.h>
 #include <roaring.hh>
 #include <roaring64map.hh>
+#include <Storages/MergeTree/MergeTreeIndexBitSliced.h>
 
 
 namespace DB
@@ -226,7 +227,7 @@ public:
         const std::vector<Range> & hyperrectangle,
         const DataTypes & data_types) const;
     
-    BoolMask checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & data_types) const;
+    BoolMask checkInBitSlices(const std::vector<ColumnBitSlices> & columns_bit_slices, const DataTypes & data_types) const;
 
     /// Whether the condition and its negation are (independently) feasible in the key range.
     /// left_key and right_key must contain all fields in the sort_descr in the appropriate order.

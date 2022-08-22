@@ -5,6 +5,7 @@
 #include <roaring64map.hh>
 #include "IO/WriteBuffer.h"
 #include <Storages/MergeTree/KeyCondition.h>
+#include <sys/types.h>
 
 namespace DB
 {
@@ -15,22 +16,18 @@ using BitSlicesVector = std::vector<BitSlices>;
 
 struct ColumnBitSlices
 {
-
+    uint bits_size;
+    BitSlices bit_slices;
 };
 
 class MergeTreeIndexGranuleBSI final : public IMergeTreeIndexGranule
 {
 public:
-    MergeTreeIndexGranuleBSI(String & index_name_, BitSlicesVector bit_slices_vector_, std::vector<size_t> bit_slices_sizes_, Block & index_sample_block_)
+    MergeTreeIndexGranuleBSI(String & index_name_, std::vector<ColumnBitSlices> & columns_bit_slices_, Block & index_sample_block_)
         : index_name(index_name_),
-          bit_slices_vector(bit_slices_vector_),
-          bit_slices_sizes(bit_slices_sizes_),
+          columns_bit_slices(columns_bit_slices_),
           index_sample_block(index_sample_block_)
     {
-        for (auto & bit_slices : bit_slices_vector)
-        {
-            bit_slices_sizes.emplace_back(bit_slices.size());
-        }
     }
 
     MergeTreeIndexGranuleBSI()= default;
@@ -40,18 +37,17 @@ public:
 
     bool empty() const override;
 
-    BitSlices &  getBitSlicesByCol(const size_t & col_number) 
+    ColumnBitSlices &  getBitSlicesByCol(const size_t & col_number) 
     {
-        if (!bit_slices_vector.empty())
-            return bit_slices_vector.at(col_number);
+        if (!columns_bit_slices.empty())
+            return columns_bit_slices.at(col_number);
         else
             throw Exception();
     }
 
     String index_name;
-    BitSlicesVector bit_slices_vector;
+    std::vector<ColumnBitSlices> columns_bit_slices;
     // this is for deserialize bit slices
-    std::vector<size_t> bit_slices_sizes;
     Block index_sample_block;
     // const IndexDescription & index;
 };
@@ -63,8 +59,6 @@ public:
     : index_name(index_name_),
       index_sample_block(index_smaple_block_)
     {
-        bit_slices_vector.resize(index_sample_block.columns());
-        bit_slices_sizes.resize(index_sample_block.columns());
     }
 
     bool empty() const override;
@@ -73,8 +67,7 @@ public:
 private:
     String index_name;
     Block index_sample_block;
-    BitSlicesVector bit_slices_vector;
-    std::vector<size_t> bit_slices_sizes;
+    std::vector<ColumnBitSlices> columns_bit_slices;
 
     void columnToBitSlices(UInt64 value, const size_t & col, const size_t & row);
 };
@@ -102,14 +95,17 @@ class MergeTreeIndexBitSliced final : public IMergeTreeIndex
 {
 public:
     MergeTreeIndexBitSliced(const IndexDescription & index_): IMergeTreeIndex(index_){}
+    ~MergeTreeIndexBitSliced() override = default;
+
     bool mayBenefitFromIndexForIn(const ASTPtr & /*node*/) const override { return true; }
     //This method is for deserialize the granuale
     MergeTreeIndexGranulePtr createIndexGranule() const override;
     MergeTreeIndexAggregatorPtr createIndexAggregator() const override;
     MergeTreeIndexConditionPtr createIndexCondition(const SelectQueryInfo & query_info, ContextPtr /*context*/) const override;
     const char* getSerializedFileExtension() const override { return ".idx2"; }
-    MergeTreeIndexFormat getDeserializedFormat(const DiskPtr disk, const std::string & path_prefix) const override;
+    MergeTreeIndexFormat getDeserializedFormat(DiskPtr disk, const std::string & path_prefix) const override;
 
 };
+
 
 }

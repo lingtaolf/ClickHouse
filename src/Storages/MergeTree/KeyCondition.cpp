@@ -1962,7 +1962,7 @@ bool KeyCondition::matchesExactContinuousRange() const
     return true;
 }
 
-BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vector, const DataTypes & /**data_types**/) const
+BoolMask KeyCondition::checkInBitSlices(const std::vector<ColumnBitSlices> & columns_bit_slices, const DataTypes & /**data_types**/) const
 {
     std::vector<BoolMask> rpn_stack;
     for (const auto & element : rpn)
@@ -1977,7 +1977,7 @@ BoolMask KeyCondition::checkInBitSlices(const BitSlicesVector & bit_slices_vecto
         else if (element.function == RPNElement::FUNCTION_IN_RANGE
             || element.function == RPNElement::FUNCTION_NOT_IN_RANGE)
         {
-            const BitSlices & bit_slices = bit_slices_vector[element.key_column];
+            const BitSlices & bit_slices = columns_bit_slices.at(element.key_column).bit_slices;
 
             /// The case when the column is wrapped in a chain of possibly monotonic functions.
             if (!element.monotonic_functions_chain.empty())
