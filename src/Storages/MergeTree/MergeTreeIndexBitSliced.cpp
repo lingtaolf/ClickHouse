@@ -1,9 +1,12 @@
 #include <sstream>
+#include <vector>
 #include <Storages/MergeTree/MergeTreeIndexBitSliced.h>
 #include <IO/WriteHelpers.h>
 #include <DataTypes/IDataType.h>
 #include <IO/VarInt.h>
 #include <Common/Exception.h>
+#include "Columns/ColumnsNumber.h"
+#include "Columns/IColumn.h"
 
 
 namespace DB
@@ -18,14 +21,18 @@ namespace ErrorCodes
 
 void MergeTreeIndexGranuleBSI::serializeBinary(DB::WriteBuffer & ostr) const
 {
-    writeVarUInt(bit_slices_size, ostr);
-    for (const auto & bit_slice : bit_slices)
+    writeVarUInt(names_bitslices.size(), ostr);
+    for (auto it = names_bitslices.begin(); it != names_bitslices.end(); ++it)
     {
-        auto size = bit_slice->getSizeInBytes();
-        writeVarUInt(size, ostr);
-        std::unique_ptr<char[]> buf(new char[size]);
-        bit_slice->write(buf.get());
-        ostr.write(buf.get(), size);
+        writeString(it->first, ostr);
+        for (const auto & bit_slice : it->second)
+        {
+            auto size = bit_slice->getSizeInBytes();
+            writeVarUInt(size, ostr);
+            std::unique_ptr<char[]> buf(new char[size]);
+            bit_slice->write(buf.get());
+            ostr.write(buf.get(), size);
+        }
     }
 }
 
@@ -35,21 +42,31 @@ void MergeTreeIndexGranuleBSI::deserializeBinary(DB::ReadBuffer & istr, DB::Merg
     if (version != 1)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Unknown index version {}.", version);
 
-    readVarUInt(bit_slices_size, istr);
-    for (size_t i = 0; i < bit_slices_size; ++i)
+    size_t map_size;
+    readVarUInt(map_size, istr);
+    for (size_t i = 0; i < map_size; ++i)
     {
+        String col_name;
+        std::vector<RoaringBitmapPtr> bit_slices;
+        readString(col_name, istr);
+        size_t bit_slices_size;
+        readVarUInt(bit_slices_size, istr);
+        for (size_t j = 0; j < bit_slices_size; ++j)
+        {
             size_t size;
             readVarUInt(size, istr);
             std::unique_ptr<char[]> buf(new char[size]);
             istr.readStrict(buf.get(), size);
             bit_slices.emplace_back(std::make_shared<RoaringBitmap>(RoaringBitmap::read(buf.get())));
+        }
+        names_bitslices[col_name] = bit_slices;
     }
 }
 
 
 bool MergeTreeIndexGranuleBSI::empty() const
 {
-    return bit_slices.empty();
+    return names_bitslices.empty();
 }
 
 MergeTreeIndexAggregatorPtr MergeTreeIndexBitSliced::createIndexAggregator() const
@@ -65,45 +82,47 @@ bool MergeTreeIndexAggregatorBSI::empty() const
 MergeTreeIndexGranulePtr MergeTreeIndexAggregatorBSI::getGranuleAndReset()
 {
     return std::make_shared<MergeTreeIndexGranuleBSI>(
-        index_name, std::move(columns_bit_slices), index_sample_block);
+        index_name, std::move(names_bitslices), index_sample_block);
 }
 
 void MergeTreeIndexAggregatorBSI::update(const Block & block, size_t * pos, size_t limit)
 {
     if (*pos >= block.rows())
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "The provided position is not less than the number of block rows. "
-                "Position: {}, Block rows: {}.", toString(*pos), toString(block.rows()));
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "The provided position is not less than the number of block rows.  Position: {}, Block rows: {}.", toString(*pos), toString(block.rows()));
+
 
     size_t rows_read = std::min(limit, block.rows() - *pos);
-    size_t row_number = *pos;
+
+    if (rows_read <= 0)
+        return ;
 
     for (size_t col = 0; col < index_sample_block.columns(); ++col)
     {
         auto index_column_name = index_sample_block.getByPosition(col).name;
         const auto & column = block.getByName(index_column_name).column;
 
-        if (columns_bit_slices.size() < col)
-        {
-            BitSlices bit_slices;
-            columns_bit_slices.emplace_back(bit_slices);
-        }
+        if (!names_bitslices.count(index_column_name))
+            names_bitslices[index_column_name] = std::vector<RoaringBitmapPtr>(); 
 
-        for (size_t i = 0; i < rows_read; ++i)
+        const ColumnUInt64 * column_uint = checkAndGetColumn<ColumnUInt64>(column.get());
+        for (size_t r = 0 ; r < rows_read; ++r)
         {
-            UInt64 value = static_cast<UInt64>(column->getUInt(*pos + i));
-            columnToBitSlices(value, col, row_number);
-            row_number++;
+            auto ref = column_uint->getDataAt(*pos + r).toString();
+            std::cout<<"====== data is :"<<ref<<std::endl;
+
         }
+            
+
     }
 
     *pos += rows_read;
 }
 
-void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, const size_t & col, const size_t & row_number)
+void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, const String & col_name, const size_t & row_number)
 {
     //Decimal to binary
     std::list<bool> binary_value;
-    auto & column_bit_slices = columns_bit_slices.at(col);
+    auto & bit_slices= names_bitslices[col_name];
 
     while (value != 0)
     {
@@ -114,9 +133,7 @@ void MergeTreeIndexAggregatorBSI::columnToBitSlices(UInt64 value, const size_t &
     for (const auto & iv : binary_value)
         ss<<iv;
 
-    LOG_INFO(&Poco::Logger::get("XF_TEST"), "====== binary value is {}", ss.str());
-
-    auto & bit_slices = column_bit_slices.bit_slices;
+    std::cout<<"XF_TEST"<<"====== binary value is: "<<ss.str();
 
     //input Bnn as the first bit slice;
     //if (bit_slices.empty())
@@ -175,7 +192,8 @@ MergeTreeIndexBitSlicedCondition::MergeTreeIndexBitSlicedCondition(
 
 bool MergeTreeIndexBitSlicedCondition::alwaysUnknownOrTrue() const
 {
-    return condition.alwaysUnknownOrTrue();
+    return true;
+    //return condition.alwaysUnknownOrTrue();
 }
 
 bool MergeTreeIndexBitSlicedCondition::mayBeTrueOnGranule(MergeTreeIndexGranulePtr idx_granule) const
@@ -183,9 +201,10 @@ bool MergeTreeIndexBitSlicedCondition::mayBeTrueOnGranule(MergeTreeIndexGranuleP
     std::shared_ptr<MergeTreeIndexGranuleBSI> granule = std::dynamic_pointer_cast<MergeTreeIndexGranuleBSI>(idx_granule);
 
     if (!granule)
-        throw Exception("Bit sliced index condition got a granule with the wrong type.", ErrorCodes::LOGICAL_ERROR);
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Bit sliced index condition got a granule with the wrong type." );
 
-    return condition.checkInBitSlices(granule->columns_bit_slices, index_data_types).can_be_true;
+    return true;
+    //return condition.checkInBitSlices(granule->columns_bit_slices, index_data_types).can_be_true;
 }
 
 MergeTreeIndexPtr bitSlicedIndexCreator(const IndexDescription & index)
@@ -195,13 +214,16 @@ MergeTreeIndexPtr bitSlicedIndexCreator(const IndexDescription & index)
 
 void bitSlicedIndexValidator(const IndexDescription & index, bool /*attach*/)
 {
-    for (const auto & data_type : index.data_types)
-    {
-        WhichDataType which(data_type);
+    if (index.column_names.size() > 0)
+        std::cout<<11<<std::endl;
+    // for (const auto & data_type : index.data_types)
+    // {
+    //     //WhichDataType which(data_type);
 
-        if (which.isUInt())
-            throw Exception("Bit sliced index can be used only with positive integer type.", ErrorCodes::INCORRECT_QUERY);
-    }
+    //     //if (which.isUInt())
+    //         //throw Exception("Bit sliced index can be used only with positive integer type.", ErrorCodes::INCORRECT_QUERY);
+    //     return;
+    // }
 }
 
 }

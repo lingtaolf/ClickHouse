@@ -6,6 +6,7 @@
 #include <IO/WriteBuffer.h>
 #include <Storages/MergeTree/KeyCondition.h>
 #include <sys/types.h>
+#include <unordered_map>
 
 namespace DB
 {
@@ -13,14 +14,15 @@ using RoaringBitmap = roaring::Roaring64Map;
 using RoaringBitmapPtr = std::shared_ptr<RoaringBitmap>;
 using BitSlices = std::vector<RoaringBitmapPtr>;
 using BitSlicesVector = std::vector<BitSlices>;
+using NamesAndBitSlices = std::unordered_map<String, BitSlices>;
 
 
 class MergeTreeIndexGranuleBSI final : public IMergeTreeIndexGranule
 {
 public:
-    MergeTreeIndexGranuleBSI(String & index_name_, BitSlices & bit_slices_, Block & index_sample_block_)
+    MergeTreeIndexGranuleBSI(String & index_name_, NamesAndBitSlices & name_bitslices_, Block & index_sample_block_)
         : index_name(index_name_),
-          bit_slices(bit_slices_),
+          names_bitslices(name_bitslices_),
           index_sample_block(index_sample_block_)
     {
     }
@@ -32,9 +34,8 @@ public:
 
     bool empty() const override;
 
-    size_t bit_slices_size;
     String index_name;
-    BitSlices bit_slices;
+    NamesAndBitSlices names_bitslices;
     // this is for deserialize bit slices
     Block index_sample_block;
     // const IndexDescription & index;
@@ -43,11 +44,11 @@ public:
 class MergeTreeIndexAggregatorBSI final : public IMergeTreeIndexAggregator
 {
 public:
-    MergeTreeIndexAggregatorBSI(const String & index_name_, const Block & index_smaple_block_)
-    : index_name(index_name_),
-      index_sample_block(index_smaple_block_)
-    {
-    }
+    // MergeTreeIndexAggregatorBSI(const String & index_name_, const Block & index_smaple_block_)
+    // : index_name(index_name_),
+    //   index_sample_block(index_smaple_block_)
+    // {
+    // }
 
     bool empty() const override;
     MergeTreeIndexGranulePtr getGranuleAndReset() override;
@@ -55,9 +56,9 @@ public:
 private:
     String index_name;
     Block index_sample_block;
-    BitSlices columns_bit_slices;
+    NamesAndBitSlices names_bitslices;
 
-    void columnToBitSlices(UInt64 value, const size_t & col, const size_t & row);
+    void columnToBitSlices(UInt64 value, const String & col_name, const size_t & row);
 };
 
 
@@ -75,8 +76,8 @@ public:
     bool alwaysUnknownOrTrue() const override;
     bool mayBeTrueOnGranule(MergeTreeIndexGranulePtr granule) const override;
 
-    DataTypes index_data_types;
-    KeyCondition condition;
+    //DataTypes index_data_types;
+    //KeyCondition condition;
 };
 
 class MergeTreeIndexBitSliced final : public IMergeTreeIndex
