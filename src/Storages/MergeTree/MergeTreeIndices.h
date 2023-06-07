@@ -241,4 +241,6 @@ void annoyIndexValidator(const IndexDescription & index, bool attach);
 MergeTreeIndexPtr invertedIndexCreator(const IndexDescription& index);
 void invertedIndexValidator(const IndexDescription& index, bool attach);
 
+MergeTreeIndexPtr bsiIndexCreator(const IndexDescription& index);
+void bsiIndexValidator(const IndexDescription& index, bool attach);
 }

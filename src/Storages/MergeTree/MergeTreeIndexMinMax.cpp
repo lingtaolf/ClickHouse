@@ -217,6 +217,7 @@ bool MergeTreeIndexMinMax::mayBenefitFromIndexForIn(const ASTPtr & node) const
 
     for (const auto & cname : index.column_names)
         if (column_name == cname)
+
             return true;
 
     if (const auto * func = typeid_cast<const ASTFunction *>(node.get()))

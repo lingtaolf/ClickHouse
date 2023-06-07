@@ -135,6 +135,9 @@ MergeTreeIndexFactory::MergeTreeIndexFactory()
     registerCreator("inverted", invertedIndexCreator);
     registerValidator("inverted", invertedIndexValidator);
 
+    registerCreator("bit_sliced", bsiIndexCreator);
+    registerValidator("bit_sliced", bsiIndexValidator);
+
 }
 
 MergeTreeIndexFactory & MergeTreeIndexFactory::instance()

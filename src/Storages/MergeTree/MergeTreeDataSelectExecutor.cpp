@@ -951,11 +951,14 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
 
     if (use_skip_indexes)
     {
+        std::cout<<"==== used skip indexes"<<std::endl;
         for (const auto & index : metadata_snapshot->getSecondaryIndices())
         {
+            std::cout<<"==== index name : "<<index.name<<std::endl;
             auto index_helper = MergeTreeIndexFactory::instance().get(index);
             if (index_helper->isMergeable())
             {
+                std::cout<<"==== branch 1"<<std::endl;
                 auto [it, inserted] = merged_indices.try_emplace({index_helper->index.type, index_helper->getGranularity()});
                 if (inserted)
                     it->second.condition = index_helper->createIndexMergedCondition(query_info, metadata_snapshot);
@@ -964,9 +967,13 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
             }
             else
             {
+                std::cout<<"==== branch 2"<<std::endl;
                 auto condition = index_helper->createIndexCondition(query_info, context);
                 if (!condition->alwaysUnknownOrTrue())
+                {
+                    std::cout<<"==== branch 2-1"<<std::endl;
                     useful_indices.emplace_back(index_helper, condition);
+                }
             }
         }
     }
@@ -1033,6 +1040,7 @@ RangesInDataParts MergeTreeDataSelectExecutor::filterPartsByPrimaryKeyAndSkipInd
 
             for (auto & index_and_condition : useful_indices)
             {
+                std::cout<<"==== index and condition:"<<index_and_condition.index->index.name<<std::endl;
                 if (ranges.ranges.empty())
                     break;
 
@@ -1629,6 +1637,7 @@ MarkRanges MergeTreeDataSelectExecutor::filterMarksUsingIndex(
 {
     if (!index_helper->getDeserializedFormat(part->getDataPartStorage(), index_helper->getFileName()))
     {
+        std::cout<<"==== skipped!"<<std::endl;
         LOG_DEBUG(log, "File for index {} does not exist ({}.*). Skipping it.", backQuote(index_helper->index.name),
             (fs::path(part->getDataPartStorage().getFullPath()) / index_helper->getFileName()).string());
         return ranges;
