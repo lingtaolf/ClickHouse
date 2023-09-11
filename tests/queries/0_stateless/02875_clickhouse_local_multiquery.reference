@@ -1,0 +1,7 @@
+Code: 62. DB::Exception: Syntax error (Multi-statements are not allowed): failed at position 9 (end of query): ; select 2;. . (SYNTAX_ERROR)
+
+Code: 62. DB::Exception: Syntax error (Multi-statements are not allowed): failed at position 9 (end of query): ; select 2;. . (SYNTAX_ERROR)
+1
+2
+1
+2
