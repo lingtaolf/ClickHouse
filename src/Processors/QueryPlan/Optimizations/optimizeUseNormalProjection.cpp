@@ -71,7 +71,7 @@ static bool hasAllRequiredColumns(const ProjectionDescription * projection, cons
 }
 
 
-bool optimizeUseNormalProjections(Stack & stack, QueryPlan::Nodes & nodes)
+bool optimizeUseNormalProjections(Stack & stack, QueryPlan::Nodes & nodes, std::vector<String> & used_projection_names_collector)
 {
     const auto & frame = stack.back();
 
@@ -162,6 +162,8 @@ bool optimizeUseNormalProjections(Stack & stack, QueryPlan::Nodes & nodes)
         reading->setAnalyzedResult(std::move(ordinary_reading_select_result));
         return false;
     }
+
+    used_projection_names_collector.emplace_back(best_candidate->projection->name);
 
     auto storage_snapshot = reading->getStorageSnapshot();
     auto proj_snapshot = std::make_shared<StorageSnapshot>(

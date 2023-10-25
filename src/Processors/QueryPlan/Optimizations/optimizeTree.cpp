@@ -4,6 +4,7 @@
 #include <Processors/QueryPlan/Optimizations/Optimizations.h>
 #include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
 #include <Processors/QueryPlan/UnionStep.h>
+#include <fmt/core.h>
 
 #include <stack>
 
@@ -108,6 +109,7 @@ void optimizeTreeSecondPass(const QueryPlanOptimizationSettings & optimization_s
     size_t max_optimizations_to_apply = optimization_settings.max_optimizations_to_apply;
     size_t num_applied_projection = 0;
     bool has_reading_from_mt = false;
+    std::vector<String> used_projection_names_collector;
 
     Stack stack;
     stack.push_back({.node = &root});
@@ -132,7 +134,7 @@ void optimizeTreeSecondPass(const QueryPlanOptimizationSettings & optimization_s
                 /// Projection optimization relies on PK optimization
                 if (optimization_settings.optimize_projection)
                     num_applied_projection
-                        += optimizeUseAggregateProjections(*frame.node, nodes, optimization_settings.optimize_use_implicit_projections);
+                        += optimizeUseAggregateProjections(*frame.node, nodes, optimization_settings.optimize_use_implicit_projections, used_projection_names_collector);
 
                 if (optimization_settings.aggregation_in_order)
                     optimizeAggregationInOrder(*frame.node, nodes);
@@ -154,7 +156,7 @@ void optimizeTreeSecondPass(const QueryPlanOptimizationSettings & optimization_s
         if (optimization_settings.optimize_projection)
         {
             /// Projection optimization relies on PK optimization
-            if (optimizeUseNormalProjections(stack, nodes))
+            if (optimizeUseNormalProjections(stack, nodes, used_projection_names_collector))
             {
                 ++num_applied_projection;
 
@@ -179,6 +181,11 @@ void optimizeTreeSecondPass(const QueryPlanOptimizationSettings & optimization_s
         throw Exception(
             ErrorCodes::PROJECTION_NOT_USED,
             "No projection is used when optimize_use_projections = 1 and force_optimize_projection = 1");
+
+    if (optimization_settings.optimize_projection && std::find(used_projection_names_collector.begin(), used_projection_names_collector.end(), optimization_settings.force_optimize_projection_name) == used_projection_names_collector.end())
+        throw Exception(
+            ErrorCodes::PROJECTION_NOT_USED,
+            fmt::format("Specified projection {} is not used in query", optimization_settings.force_optimize_projection_name).c_str());
 }
 
 void optimizeTreeThirdPass(QueryPlan & plan, QueryPlan::Node & root, QueryPlan::Nodes & nodes)

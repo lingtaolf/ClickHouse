@@ -542,7 +542,7 @@ static QueryPlan::Node * findReadingStep(QueryPlan::Node & node)
     return nullptr;
 }
 
-bool optimizeUseAggregateProjections(QueryPlan::Node & node, QueryPlan::Nodes & nodes, bool allow_implicit_projections)
+bool optimizeUseAggregateProjections(QueryPlan::Node & node, QueryPlan::Nodes & nodes, bool allow_implicit_projections, std::vector<String> &used_projection_names_collector)
 {
     if (node.children.size() != 1)
         return false;
@@ -714,6 +714,9 @@ bool optimizeUseAggregateProjections(QueryPlan::Node & node, QueryPlan::Nodes & 
         node.step = aggregating->convertToAggregatingProjection(expr_or_filter_node.step->getOutputStream());
         node.children.push_back(&expr_or_filter_node);
     }
+
+    for(const auto & candidate : candidates.real)
+        used_projection_names_collector.emplace_back(candidate.projection->name);
 
     return true;
 }
