@@ -3,6 +3,7 @@
 #include <optional>
 #include <memory>
 #include <Poco/UUID.h>
+#include <Poco/Net/NameValueCollection.h>
 #include <Poco/Util/Application.h>
 #include <Common/Macros.h>
 #include <Common/EventNotifier.h>
@@ -4218,12 +4219,15 @@ void Context::setClientConnectionId(uint32_t connection_id_)
     client_info.connection_id = connection_id_;
 }
 
-void Context::setHttpClientInfo(ClientInfo::HTTPMethod http_method, const String & http_user_agent, const String & http_referer)
+void Context::setHttpClientInfo(ClientInfo::HTTPMethod http_method, const String & http_user_agent, const String & http_referer, const Poco::Net::NameValueCollection & http_headers)
 {
     client_info.http_method = http_method;
     client_info.http_user_agent = http_user_agent;
     client_info.http_referer = http_referer;
     need_recalculate_access = true;
+
+    if (!http_headers.empty())
+        client_info.headers = http_headers;
 }
 
 void Context::setForwardedFor(const String & forwarded_for)

@@ -1530,6 +1530,7 @@ geohashEncode
 geohashesInBox
 geoip
 geospatial
+getHTTPHeader
 getMacro
 getOSKernelVersion
 getServerPort
