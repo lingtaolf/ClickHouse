@@ -427,13 +427,36 @@ The value 0 means that you can delete all tables without any restrictions.
 ```
 
 ## max\_database\_num\_to\_warn {#max-database-num-to-warn}  
-If the number of attached databases exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.
+If the number of attached databases exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.    
+Default value: 1000
+
+**Example**
+
+``` xml
+<max_database_num_to_warn>50</max_database_num_to_warn>
+```
   
 ## max\_table\_num\_to\_warn {#max-table-num-to-warn}   
-If the number of attached tables exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.
+If the number of attached tables exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.  
+Default value: 5000    
+
+**Example**
+
+``` xml
+<max_table_num_to_warn>400</max_table_num_to_warn>
+```
+
 
 ## max\_part\_num\_to\_warn {#max-part-num-to-warn}  
 If the number of active parts exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.  
+Default value: 100000  
+
+**Example**
+
+``` xml
+<max_part_num_to_warn>400</max_part_num_to_warn>
+```
+
 
 ## merge\_tree {#server_configuration_parameters-merge_tree}
 
