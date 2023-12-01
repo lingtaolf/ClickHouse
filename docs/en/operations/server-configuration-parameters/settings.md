@@ -426,6 +426,15 @@ The value 0 means that you can delete all tables without any restrictions.
 <max_table_size_to_drop>0</max_table_size_to_drop>
 ```
 
+## max\_database\_num\_to\_warn {#max-database-num-to-warn}  
+If the number of attached databases exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.
+  
+## max\_table\_num\_to\_warn {#max-table-num-to-warn}   
+If the number of attached tables exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.
+
+## max\_part\_num\_to\_warn {#max-part-num-to-warn}  
+If the number of active parts exceeds the specified value, clickhouse server will add warning message to `system.warnings` table.  
+
 ## merge\_tree {#server_configuration_parameters-merge_tree}
 
 Fine tuning for tables in the [MergeTree](../../engines/table-engines/mergetree-family/mergetree.md).
